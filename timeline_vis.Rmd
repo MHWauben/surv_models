@@ -1,0 +1,135 @@
+---
+title: "Timeline visualisation"
+output:
+  html_document:
+    df_print: paged
+---
+
+Notebook demonstrating how to use the [timevis](https://github.com/daattali/timevis) R package using randomly generated events and time periods. 
+
+Done to demonstrate how one may illustrate an individual's history. Specifically, inspired by this application in Health care: https://github.com/BenGlicksberg/PatientExploreR
+
+```{r setup, message = FALSE}
+# install.packages("timevis")
+library(timevis)
+
+library(data.table)
+library(dtplyr)
+library(dplyr, warn.conflicts = FALSE)
+library(lubridate)
+library(magrittr)
+library(RColorBrewer)
+
+# Parameters for data generation
+num_ev <- 50
+num_periods <- 10
+start_date <- as.Date('2017-01-01')
+end_date <- as.Date('2019-01-01')
+# Parameters for styling and grouping
+colour_col <- 'content_type'
+group_col <- 'groups'
+```
+
+# Data generation
+
+Generate events of different types (with no end date).
+
+```{r event data generation}
+types <- c("one", "two", "three")
+events <- data.frame(ev_id = seq(1, num_ev, length = num_ev),
+                     groups = "event",
+                     subgroups = sample(types, num_ev, replace = TRUE),
+                     start = sample(seq(start_date, end_date, by = "day"), num_ev),
+                     end = as.Date(NA),
+                     content = "event description",
+                     stringsAsFactors = FALSE) %>%
+  dtplyr::lazy_dt(.) %>%
+  dplyr::mutate(content_type = subgroups) %>%
+  data.table::as.data.table(.)
+```
+
+Generate time periods of different types. 
+
+```{r time range generation}
+period_types <- c("alpha", "beta", "gamma")
+periods <- data.frame(ev_id = seq(num_ev, num_ev + num_periods, length = num_periods),
+                      groups = "period",
+                      subgroups = sample(period_types, num_periods, replace = TRUE),
+                      start = sample(seq(start_date, end_date, by = "day"), num_periods),
+                      end = sample(seq(start_date, end_date, by = "day"), num_periods),
+                      content = "period description",
+                     stringsAsFactors = FALSE) %>%
+  dtplyr::lazy_dt(.) %>%
+  dplyr::mutate(content_type = subgroups,
+                end = as.Date(ifelse(end < start, start + 14, end), origin = "1970-01-01")) %>%
+  data.table::as.data.table(.)
+```
+
+```{r combine events and periods}
+all_data <- dplyr::bind_rows(events, periods)
+```
+
+# Colour style generation
+
+Use RColorBrewer to create a qualitative palette of colours. This creates HEX codes, which then need to be pasted into a CSS style vector. 
+
+```{r colour vector}
+# Set group colours
+n <- length(unique(all_data[[colour_col]]))
+qual_col_pals <- RColorBrewer::brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_code <- sample(unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals))), n, replace = TRUE)
+# Turn list of HEX codes into CSS styling string
+col_vector <- paste("background-color:", col_code, "; border-color:", col_code)
+# To also change the colour of the dots, it needs to be in a Shiny HTML tag: 
+# https://stackoverflow.com/questions/57069911/how-do-i-change-the-color-of-the-points-in-the-timeline-visualization-using-time
+```
+
+```{r style dataframe}
+# Create style based on colours above
+styles <- data.frame(content = unique(all_data[[colour_col]]),
+                     style_id = as.numeric(as.factor(unique(all_data[[colour_col]]))),
+                     title = unique(all_data[[colour_col]]),
+                     code = col_code,
+                     style = col_vector)
+```
+
+# Group ID generation
+
+Each group (named in the left margin) needs its own numeric ID. Timevis then requires a dataframe of group name and IDs to add the strings to the left margin. 
+
+```{r group ID dataframe}
+# Create group IDs
+groups <- data.frame(content = unique(all_data[[group_col]]),
+                     id = as.numeric(as.factor(unique(all_data[[group_col]]))),
+                     title = unique(all_data[[group_col]]))
+```
+
+# Combine all data with style and group IDs
+
+Merge the dataframe created above into the data, so we can prepare the final data as it is required by the timevis package. 
+
+```{r add style and group IDs to main data}
+prep_data <- copy(all_data)  %>%
+  merge(., styles, how = 'left', by.x = colour_col, by.y = "content") %>%
+  merge(., groups, how = 'left', by.x = group_col, by.y = "content") %>%
+  .[, .(id = rownames(.),
+        content = content,
+        start = start,
+        group = id,
+        subgroup = subgroups,
+        end = end,
+        style = style)]
+```
+
+# Create actual timeline visualisation
+
+Takes the prepared data (with the correct column names), and the groups dataframe to make sense of the group IDs. 
+
+```{r visualise timeline}
+timevis::timevis(prep_data, groups = groups, fit = TRUE, 
+                 options = list(stack = FALSE))
+```
+
+
+
+
