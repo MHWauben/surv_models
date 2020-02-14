@@ -31,7 +31,7 @@ person <- c("Tim", "Steve", "John")
 
 ### event data generation ----
 types <- c("one", "two", "three")
-ev_classNames <- c("mild", "medium", "spicy")
+ev_classNames <- c("mild", "spicy", "medium")
 events <- data.frame(person = sample(person, num_ev, replace = TRUE),
                      ev_id = seq(1, num_ev, length = num_ev),
                      groups = "event",
@@ -76,9 +76,9 @@ group_col <- 'groups'
 qual_col_pals <- RColorBrewer::brewer.pal.info[brewer.pal.info$category == 'qual',]
 
 # Set group colours -------
-# For some classes, we want fixed colors because they are meaningful
+# For some classes, we want fixed colors in a specific order because they are meaningful
 one_palette <- data.table(subgroups = 'one',
-                         className = ev_classNames,
+                         className = c("spicy", "medium", "mild"),
                          color = brewer.pal(length(ev_classNames), "RdYlBu"))
 # For other classes, we automatically set them
 two_palette <- data.table(subgroups = 'two',
